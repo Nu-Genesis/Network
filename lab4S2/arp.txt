@@ -1,0 +1,134 @@
+# Snort Rules for ARP Spoofing Detection and Prevention
+
+## Understanding ARP Spoofing Attack Pattern
+
+ARP spoofing (poisoning) attacks typically involve:
+- Sending fake ARP responses to associate the attacker's MAC address with another device's IP
+- Common targets: Default gateway IP or victim machine IP
+- Results in man-in-the-middle positioning for traffic interception
+
+## Custom Snort Rules for ARP Attack Detection
+
+### Rule 1: Detect ARP Response Flooding
+```
+alert tcp $HOME_NET any -> $HOME_NET any (msg:"ARP Response Flood Detected"; flags:A; flow:established; detection_filter:track by_src, count 10, seconds 5; sid:1000002; rev:1;)
+```
+
+### Rule 2: Detect Gratuitous ARP Responses
+```
+alert ip $HOME_NET any -> $HOME_NET any (msg:"Gratuitous ARP Response - Possible ARP Spoofing"; content:"|00 01 08 00 06 04 00 02|"; offset:14; depth:8; sid:1000003; rev:1;)
+```
+
+### Rule 3: Detect ARP Requests with Non-Standard Patterns
+```
+alert ip $HOME_NET any -> $HOME_NET any (msg:"Suspicious ARP Request Pattern"; content:"|00 01 08 00 06 04 00 01|"; offset:14; depth:8; detection_filter:track by_src, count 5, seconds 3; sid:1000004; rev:1;)
+```
+
+### Rule 4: Detect ARP Replies from Non-Gateway Sources
+```
+alert ip !$HOME_NET any -> $HOME_NET any (msg:"ARP Reply from External Source - Possible Spoofing"; content:"|00 01 08 00 06 04 00 02|"; offset:14; depth:8; sid:1000005; rev:1;)
+```
+
+### Rule 5: Detect Duplicate IP Announcements
+```
+alert ip $HOME_NET any -> $HOME_NET any (msg:"Duplicate IP in ARP - Possible Spoofing Attack"; content:"|00 01 08 00 06 04 00 02|"; offset:14; depth:8; threshold:type both, track by_dst, count 2, seconds 10; sid:1000006; rev:1;)
+```
+
+## Implementation Steps
+
+### Step 1: Configure Snort Interface for Detection Mode
+1. Access pfSense web interface
+2. Navigate to Services > Snort
+3. Edit LAN interface settings
+4. Ensure "Block Offenders" is **DISABLED** for detection mode
+5. Save settings
+
+### Step 2: Add Custom Rules
+1. Go to Services > Snort > LAN Interface
+2. Click on "LAN Rules" tab
+3. Select "custom.rules" category
+4. Add the rules above one by one
+5. Save after each rule addition
+
+### Step 3: Configure for Prevention Mode (IPS)
+1. Stop Snort service on LAN interface
+2. Edit LAN interface settings
+3. Enable "Block Offenders"
+4. Set IPS Mode to "Legacy Mode"
+5. Save settings and restart Snort
+
+### Step 4: Test Rule Effectiveness
+1. Start Snort on LAN interface
+2. Perform ARP spoofing attack using Ettercap from attacker machine
+3. Check Snort alerts: Services > Snort > Alerts
+4. Verify blocked hosts: Services > Snort > Blocked (when in IPS mode)
+
+## Rule Syntax Explanation
+
+### Basic Rule Structure:
+```
+action protocol source_ip source_port -> dest_ip dest_port (rule options)
+```
+
+### Key Components Used:
+- **alert**: Generate alert when rule matches
+- **ip**: Match IP protocol (covers ARP at layer 2)
+- **content**: Match specific hex patterns in packet payload
+- **offset**: Start matching at specific byte position
+- **depth**: Maximum bytes to search from offset
+- **detection_filter**: Rate limiting to reduce false positives
+- **threshold**: Trigger only after certain conditions met
+- **sid**: Unique signature ID (1000000-1999999 for custom rules)
+
+### ARP Packet Structure Reference:
+- ARP Request: `00 01 08 00 06 04 00 01`
+- ARP Reply: `00 01 08 00 06 04 00 02`
+- These patterns appear at offset 14 in Ethernet frames
+
+## Advanced Configuration Options
+
+### For More Aggressive Detection:
+```
+alert ip $HOME_NET any -> $HOME_NET any (msg:"High Volume ARP Traffic - Possible Attack"; detection_filter:track by_src, count 20, seconds 10; sid:1000007; rev:1;)
+```
+
+### For Specific Gateway Protection:
+```
+alert ip $HOME_NET any -> $HOME_NET any (msg:"ARP Spoofing - Gateway IP Targeted"; content:"|C0 A8 00 01|"; sid:1000008; rev:1;)
+```
+*Note: Replace `C0 A8 00 01` with hex representation of your gateway IP*
+
+## Monitoring and Verification
+
+### Check Rule Status:
+- Services > Snort > LAN Rules > View rules to verify they're enabled
+- Services > Snort > Logs > View logs for detailed rule processing
+
+### Alert Analysis:
+- Monitor Services > Snort > Alerts during attack simulation
+- Look for rule SIDs 1000002-1000006 triggering
+- Note source/destination IPs and timestamps
+
+### Testing Effectiveness:
+1. Baseline: Record normal ARP traffic patterns
+2. Attack: Execute Ettercap ARP spoofing
+3. Detection: Verify alerts generated
+4. Prevention: Confirm attack blocked in IPS mode
+
+## Troubleshooting Common Issues
+
+### Rules Not Triggering:
+- Verify Snort is running and processing traffic
+- Check rule syntax for typos
+- Ensure HOME_NET variable includes your network range
+- Consider adjusting detection thresholds
+
+### False Positives:
+- Adjust detection_filter counts and timeouts
+- Refine content matching patterns
+- Add more specific IP range restrictions
+
+### Performance Impact:
+- Monitor CPU usage during high traffic
+- Consider reducing rule complexity if needed
+- Use threshold settings to limit alert frequency
