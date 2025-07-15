@@ -1,0 +1,745 @@
+# Midterm Exam Prep Guide - SSH Attack Scenario
+
+## Exam Overview
+- **Total Points**: 35
+- **Networks**: 172.16.x.0/25 and 192.168.x.0/24
+- **Attack Method**: SSH connection/brute force
+- **Tools**: Kali Linux (attacker), Kali/Windows (victim), Snort/Suricata (IDS), Firewall
+
+## Task 1: Network Setup and SSH Attack (10 points)
+
+### Pre-Attack Setup
+1. **Verify Network Connectivity**
+   - Test routing between 172.16.x.0/25 and 192.168.x.0/24
+   - Use `ping` to confirm reachability
+   - Check routing tables with `route -n` or `ip route`
+
+2. **Machine Configuration**
+   - **Attacker (Kali)**: Connect to 172.16.x.0/25 network
+   - **Victim (Kali/Windows)**: Connect to 192.168.x.0/24 network
+   - Ensure SSH service is running on victim machine
+
+### SSH Attack Options
+
+#### Option A: SSH Brute Force Attack
+```bash
+# Using Hydra for SSH brute force
+hydra -l username -P /usr/share/wordlists/rockyou.txt ssh://[victim_ip]
+
+# Using Medusa
+medusa -h [victim_ip] -u username -P /usr/share/wordlists/rockyou.txt -M ssh
+
+# Using Ncrack
+ncrack -p 22 --user username -P /usr/share/wordlists/rockyou.txt [victim_ip]
+```
+
+#### Option B: SSH Connection with Suspicious Patterns
+```bash
+# Multiple failed login attempts
+ssh username@[victim_ip] -p 22
+# Try different usernames: admin, root, test, etc.
+
+# SSH port scanning
+nmap -p 22 [victim_ip]
+nmap -sS -p 22 [victim_ip]
+```
+
+### Documentation for Task 1
+- Screenshot of successful connection between networks
+- Evidence of SSH attack (command output, failed login attempts)
+- Wireshark capture showing SSH traffic
+
+## Task 2: IDS Rule Creation (5 points)
+
+### Snort Rules for Simple SSH Detection
+
+#### Rule 1: Basic SSH Connection Detection (Simplest)
+```bash
+alert tcp any any -> any 22 (msg:"SSH Connection Detected"; sid:1000001; rev:1;)
+```
+
+#### Rule 2: SSH Protocol Version Detection
+```bash
+alert tcp any any -> any 22 (msg:"SSH Protocol Detected"; content:"SSH-"; offset:0; depth:4; sid:1000002; rev:1;)
+```
+
+#### Rule 3: SSH Connection from Specific Network (Most Targeted)
+```bash
+alert tcp 172.16.0.0/16 any -> 192.168.0.0/16 22 (msg:"SSH Connection from 172.16.x.x to 192.168.x.x"; sid:1000003; rev:1;)
+```
+
+#### Rule 4: SSH with Flow State (Recommended for Lab)
+```bash
+alert tcp any any -> any 22 (msg:"SSH Connection Attempt"; flow:to_server,established; sid:1000004; rev:1;)
+```
+
+### Suricata Rules Alternative
+```bash
+alert ssh any any -> $HOME_NET 22 (msg:"SSH Brute Force Detected"; flow:to_server; ssh.protoversion:2.0; threshold:type threshold, track by_src, count 5, seconds 60; sid:2000001; rev:1;)
+```
+
+## Nmap Attack Detection with Snort
+
+### Why Nmap is Perfect for Your Lab
+- Creates distinctive traffic patterns
+- Easy to detect with simple rules
+- Generates multiple packets/alerts
+- Clear "attack" behavior for demonstration
+
+### Basic Nmap Commands for Your Attack
+
+#### From Attacker Machine (172.16.x.x):
+```bash
+# Basic port scan
+nmap 192.168.x.x
+
+# Scan specific ports
+nmap -p 22,80,443 192.168.x.x
+
+# SYN scan (most common)
+nmap -sS 192.168.x.x
+
+# Scan entire subnet
+nmap 192.168.x.0/24
+```
+
+### Snort Rules for Nmap Detection
+
+#### Rule 1: Simple Port Scan Detection (Best for Lab)
+```bash
+alert tcp any any -> any any (msg:"Possible Port Scan"; flags:S; threshold:type both, track by_src, count 10, seconds 60; sid:1000001; rev:1;)
+```
+
+#### Rule 2: SYN Scan Detection
+```bash
+alert tcp any any -> any any (msg:"SYN Scan Detected"; flags:S,!A; threshold:type threshold, track by_src, count 5, seconds 10; sid:1000002; rev:1;)
+```
+
+#### Rule 3: Multiple Port Scan (Simpler)
+```bash
+alert tcp any any -> any any (msg:"Multiple Port Connections"; flags:S; threshold:type both, track by_src, count 5, seconds 30; sid:1000003; rev:1;)
+```
+
+#### Rule 4: Nmap OS Detection
+```bash
+alert tcp any any -> any any (msg:"OS Fingerprinting Attempt"; flags:S,12; sid:1000004; rev:1;)
+```
+
+#### Rule 5: Very Simple Scan Detection
+```bash
+alert tcp any any -> any any (msg:"Port Scan Activity"; flags:S; threshold:type threshold, track by_src, count 3, seconds 10; sid:1000005; rev:1;)
+```
+
+### Recommended Rule for Your Lab Demo
+
+**Start with this simple one:**
+```bash
+alert tcp any any -> any any (msg:"Port Scan Detected"; flags:S; threshold:type threshold, track by_src, count 5, seconds 10; sid:1000001; rev:1;)
+```
+
+**How it works:**
+- Detects TCP SYN packets (flags:S)
+- Triggers after 5 SYN packets from same source in 10 seconds
+- Perfect for catching nmap scans
+
+### Lab Demo Sequence
+
+#### Step 1: Start Snort in pfSense
+- Add the rule to your custom rules
+- Enable the rule
+- Start monitoring
+
+#### Step 2: Run Nmap from Attacker
+```bash
+# From 172.16.x.x machine:
+nmap 192.168.x.x
+
+# This will send multiple SYN packets and trigger the rule
+```
+
+#### Step 3: Expected Snort Alert
+```
+[**] [1:1000001:1] Port Scan Detected [**]
+[Priority: 0] 
+01/15-14:30:45.123456 172.16.x.x:54321 -> 192.168.x.x:80
+TCP TTL:64 TOS:0x0 ID:12345 IpLen:20 DgmLen:60 DF
+***A**S* Seq: 0x12345678  Ack: 0x0  Win: 0x7210  TcpLen: 40
+```
+
+### Advanced Nmap Detection Rules
+
+#### Rule for Specific Nmap Techniques:
+```bash
+# Detect TCP connect scan
+alert tcp any any -> any any (msg:"TCP Connect Scan"; flags:S; threshold:type both, track by_src, count 10, seconds 60; sid:1000010; rev:1;)
+
+# Detect UDP scan
+alert udp any any -> any any (msg:"UDP Port Scan"; threshold:type threshold, track by_src, count 10, seconds 60; sid:1000011; rev:1;)
+
+# Detect stealth scan
+alert tcp any any -> any any (msg:"Stealth Scan Detected"; flags:F; sid:1000012; rev:1;)
+```
+
+### Testing Your Rules
+
+#### Test 1: Basic Nmap
+```bash
+nmap 192.168.x.x
+# Should trigger after scanning ~5 ports
+```
+
+#### Test 2: Fast Scan
+```bash
+nmap -F 192.168.x.x
+# Scans top 100 ports quickly
+```
+
+#### Test 3: Specific Ports
+```bash
+nmap -p 1-100 192.168.x.x
+# Guaranteed to trigger threshold
+```
+
+### Why Nmap Works Better Than SSH
+
+1. **Multiple Packets**: Nmap sends many packets vs SSH's single connection
+2. **Distinctive Patterns**: SYN scans have clear signatures
+3. **Easy Thresholds**: Can set rules to trigger after X attempts
+4. **Clear Attack Behavior**: Obviously reconnaissance activity
+5. **Guaranteed Detection**: Hard to miss with proper rules
+
+### Firewall Rules for Nmap
+
+Once you detect the nmap scan, block it with:
+
+#### iptables Rule:
+```bash
+# Block the scanning IP
+iptables -A INPUT -s 172.16.x.x -j DROP
+
+# Rate limit SYN packets
+iptables -A INPUT -p tcp --syn -m limit --limit 1/s --limit-burst 3 -j ACCEPT
+iptables -A INPUT -p tcp --syn -j DROP
+```
+
+#### pfSense Rule:
+- Action: Block
+- Protocol: TCP
+- Source: 172.16.x.x (or 172.16.0.0/16)
+- Destination: Any
+- Description: "Block port scanner"
+
+### Perfect for Your Exam Because:
+- **Detectable**: Clear traffic patterns
+- **Demonstrable**: Immediate alerts
+- **Specific**: Can create targeted firewall rules
+- **Realistic**: Actual attack reconnaissance
+- **Reliable**: Works consistently in lab environments
+
+Try the simple threshold rule first - it should trigger immediately when you run nmap!
+
+### pfSense Snort Specific Issues
+
+#### Issue 1: pfSense May Filter SSH Management Traffic
+Since you're using SSH to access pfSense itself, pfSense might be filtering or not inspecting its own management traffic.
+
+**Try SSH to a Different Target:**
+- SSH from 172.16.x.x to 192.168.x.x (not to pfSense itself)
+- Let pfSense monitor traffic between the networks
+
+#### Issue 2: Interface Placement in pfSense
+In pfSense Snort, make sure:
+- Snort is monitoring the **LAN** interface (where traffic flows)
+- Not monitoring the **WAN** interface for internal traffic
+- Check: Services → Snort → Interface Settings
+
+#### Issue 3: SSH Connection vs SSH Protocol Detection
+```bash
+# This catches the TCP connection attempt:
+alert tcp any any -> any 22 (msg:"SSH Connection Attempt"; flags:S; sid:1000001; rev:1;)
+
+# This catches the SSH protocol handshake:
+alert tcp any any -> any 22 (msg:"SSH Protocol"; content:"SSH-2.0"; sid:1000002; rev:1;)
+```
+
+### pfSense Snort Testing Strategy
+
+#### Step 1: Test Simple TCP Connection
+```bash
+alert tcp any any -> any 22 (msg:"TCP to Port 22"; flags:S; sid:1000001; rev:1;)
+```
+
+#### Step 2: If That Works, Add SSH Content
+```bash
+alert tcp any any -> any 22 (msg:"SSH Protocol"; content:"SSH-"; nocase; sid:1000002; rev:1;)
+```
+
+#### Step 3: Test with Telnet First
+```bash
+# From your attacker machine:
+telnet 192.168.x.x 22
+
+# This should trigger the TCP rule and show SSH banner
+```
+
+### Alternative Rules for pfSense
+
+#### Bidirectional Rule (Catches Both Ways)
+```bash
+alert tcp any any <> any 22 (msg:"SSH Traffic"; sid:1000001; rev:1;)
+```
+
+#### Established Connection Rule
+```bash
+alert tcp any any -> any 22 (msg:"SSH Connection"; flow:established; sid:1000001; rev:1;)
+```
+
+#### SYN Flag Rule (Connection Attempt)
+```bash
+alert tcp any any -> any 22 (msg:"SSH SYN"; flags:S; sid:1000001; rev:1;)
+```
+
+### pfSense Snort Configuration Check
+
+1. **Go to Services → Snort → Global Settings**
+   - Make sure "Enable Snort" is checked
+   - Check "Enable OpenAppID" if available
+
+2. **Go to Services → Snort → Interface Settings**
+   - Click on your interface
+   - Make sure "Enable" is checked
+   - Check "Block offenders" if you want
+
+3. **Go to Services → Snort → Rules**
+   - Make sure your custom rule is enabled
+   - Check that the rule category is enabled
+
+### Quick Test Sequence
+
+```bash
+# 1. Start with this simple rule:
+alert tcp any any -> any 22 (msg:"Port 22 Traffic"; sid:1000001; rev:1;)
+
+# 2. Test with telnet (should trigger):
+telnet 192.168.x.x 22
+
+# 3. If that works, try SSH:
+ssh user@192.168.x.x
+
+# 4. If SSH doesn't trigger, try:
+alert tcp any any -> any 22 (msg:"SSH Protocol"; content:"SSH-"; sid:1000002; rev:1;)
+```
+
+### Why SSH Might Not Trigger in pfSense
+
+1. **Management Traffic Exemption**: pfSense might exempt SSH management traffic
+2. **Encrypted Traffic**: Once SSH handshake completes, traffic is encrypted
+3. **Timing**: The alert might only trigger on initial connection, not established sessions
+4. **Interface Monitoring**: Make sure Snort is monitoring the right interface for cross-network traffic
+
+### Recommended Rule for pfSense Lab
+```bash
+alert tcp any any -> any 22 (msg:"SSH Connection to Port 22"; flow:to_server,established; sid:1000001; rev:1;)
+```
+
+This should catch the SSH connection establishment phase, which is what you want for your lab demo.
+
+### Common Issues & Solutions
+
+#### Issue 1: Wrong Network Interface
+```bash
+# Check which interface your traffic is on:
+sudo tcpdump -i eth0 port 22
+# Then try SSH - you should see packets
+
+# If no packets, try different interface:
+sudo tcpdump -i ens33 port 22
+```
+
+#### Issue 2: Snort Not Running as Root
+```bash
+# Always run with sudo:
+sudo snort -A console -q -c /etc/snort/snort.conf -i eth0
+```
+
+#### Issue 3: Rule File Not Loaded
+```bash
+# Check snort.conf includes your rule file:
+sudo nano /etc/snort/snort.conf
+
+# Look for this line (uncomment if needed):
+include $RULE_PATH/local.rules
+```
+
+#### Issue 4: SSH Traffic Not Reaching Snort Interface
+```bash
+# Check if you're monitoring the right network segment
+# If Snort is on 192.168.x.x but SSH is 172.16.x.x -> 192.168.x.x
+# You need to monitor the interface where traffic flows
+
+# Use Wireshark or tcpdump to see traffic:
+sudo tcpdump -i eth0 -n port 22
+```
+
+### Testing Your SSH Rule
+
+#### Step 1: Start Snort
+```bash
+sudo snort -A console -q -c /etc/snort/snort.conf -i eth0
+```
+
+#### Step 2: Make SSH Connection (Different Terminal)
+```bash
+ssh username@192.168.x.x
+```
+
+#### Step 3: Expected Snort Output
+```
+[**] [1:1000001:1] SSH Connection Detected [**]
+[Priority: 0] 
+01/15-14:30:45.123456 172.16.x.x:54321 -> 192.168.x.x:22
+TCP TTL:64 TOS:0x0 ID:12345 IpLen:20 DgmLen:60 DF
+***A**S* Seq: 0x12345678  Ack: 0x0  Win: 0x7210  TcpLen: 40
+```
+
+### Alternative Simple Test
+
+#### Use a Super Simple Rule First:
+```bash
+# Rule that catches ALL TCP traffic:
+alert tcp any any -> any any (msg:"Any TCP Traffic"; sid:1000010; rev:1;)
+```
+
+This should trigger on any TCP connection. If this doesn't work, the issue is with Snort setup, not your SSH rule.
+
+### Quick Diagnosis Commands
+
+```bash
+# 1. Check if SSH service is creating network traffic:
+sudo netstat -tlnp | grep :22
+
+# 2. Check if packets are flowing:
+sudo tcpdump -i eth0 -n port 22
+
+# 3. Check Snort processes:
+ps aux | grep snort
+
+# 4. Check Snort logs:
+sudo tail -f /var/log/snort/alert
+```
+
+### Router SSH Notes
+
+If you're SSHing to a router, make sure:
+1. The router's SSH port is actually 22
+2. Your Snort machine can see the traffic (not switched/isolated)
+3. The router allows SSH connections
+
+```bash
+# Check if router SSH is on port 22:
+nmap -p 22 [router_ip]
+
+# Try different SSH ports:
+nmap -p 22,23,2222 [router_ip]
+```
+
+## Task 3: Firewall Rule Implementation (5 points)
+
+### Iptables Rules (Linux)
+
+#### Option 1: Block SSH from Specific Source
+```bash
+# Block SSH from attacker IP
+iptables -A INPUT -s [attacker_ip] -p tcp --dport 22 -j DROP
+
+# Block SSH brute force attempts
+iptables -A INPUT -p tcp --dport 22 -m conntrack --ctstate NEW -m recent --set --name SSH
+iptables -A INPUT -p tcp --dport 22 -m conntrack --ctstate NEW -m recent --update --seconds 60 --hitcount 4 --name SSH -j DROP
+```
+
+#### Option 2: Rate Limiting SSH Connections
+```bash
+# Limit SSH connections per minute
+iptables -A INPUT -p tcp --dport 22 -m conntrack --ctstate NEW -m recent --set --name SSH
+iptables -A INPUT -p tcp --dport 22 -m conntrack --ctstate NEW -m recent --update --seconds 60 --hitcount 3 --name SSH -j DROP
+```
+
+### Windows Firewall Rules
+```powershell
+# Block specific IP from SSH access
+New-NetFirewallRule -DisplayName "Block SSH from Attacker" -Direction Inbound -Protocol TCP -LocalPort 22 -RemoteAddress [attacker_ip] -Action Block
+
+# Block SSH brute force
+New-NetFirewallRule -DisplayName "SSH Rate Limit" -Direction Inbound -Protocol TCP -LocalPort 22 -DynamicTarget Any -Action Block
+```
+
+### pfSense/Hardware Firewall
+1. Navigate to Firewall → Rules
+2. Create rule:
+   - Action: Block
+   - Protocol: TCP
+   - Source: [attacker_network/IP]
+   - Destination Port: 22
+   - Description: "Block SSH from attacker"
+
+## Task 4: Knowledge Questions Preparation (15 points)
+
+### Key Topics to Review
+
+#### Network Security Fundamentals
+- **CIA Triad**: Confidentiality, Integrity, Availability
+- **Defense in Depth**: Multiple layers of security
+- **Network Segmentation**: Isolating network segments
+- **VLANs and Subnetting**: Network isolation techniques
+
+#### Intrusion Detection Systems
+- **Signature-based vs Anomaly-based**: Detection methods
+- **IDS vs IPS**: Detection vs Prevention
+- **Snort Rule Syntax**: Components and structure
+- **False Positives/Negatives**: Understanding detection accuracy
+
+#### Firewall Technologies
+- **Stateful vs Stateless**: Firewall types
+- **Access Control Lists (ACLs)**: Rule-based filtering
+- **NAT and PAT**: Network Address Translation
+- **DMZ Configuration**: Demilitarized zone setup
+
+#### Attack Vectors and Mitigation
+- **Brute Force Attacks**: Methods and prevention
+- **Port Scanning**: Detection and blocking
+- **SSH Hardening**: Security best practices
+- **Log Analysis**: Identifying attack patterns
+
+### Sample Questions to Practice
+1. What are the differences between IDS and IPS?
+2. Explain the components of a Snort rule.
+3. How does stateful firewall inspection work?
+4. What are the signs of a brute force attack?
+5. Describe the principle of least privilege.
+
+## Demonstration Checklist
+
+### Pre-Demo Preparation
+- [ ] Both networks (172.16.x.0/25 and 192.168.x.0/24) are communicating
+- [ ] SSH service is running on victim machine
+- [ ] IDS is configured and running
+- [ ] Firewall rules are prepared but not yet implemented
+- [ ] Wireshark is ready for packet capture
+
+### Demo Sequence
+1. **Show Network Connectivity**
+   - Ping between networks
+   - Show routing table
+
+2. **Perform SSH Attack**
+   - Execute brute force or connection attempts
+   - Show attack in progress
+
+3. **Demonstrate IDS Detection**
+   - Show IDS alerts triggering
+   - Explain rule that detected the attack
+
+4. **Implement Firewall Rule**
+   - Add specific firewall rule
+   - Show attack being blocked
+   - Verify rule effectiveness
+
+5. **Explain Security Measures**
+   - Discuss why this rule is effective
+   - Explain how it's specific to the attack
+
+## Commands Reference
+
+### Network Testing
+```bash
+# Check connectivity
+ping [target_ip]
+
+# Check routing
+route -n
+ip route show
+
+# Check open ports
+nmap -sS [target_ip]
+```
+
+### Log Monitoring
+```bash
+# Monitor SSH logs
+tail -f /var/log/auth.log
+tail -f /var/log/secure
+
+# Monitor Snort logs
+tail -f /var/log/snort/alert
+```
+
+### Firewall Management
+```bash
+# Check current rules
+iptables -L -n
+
+# Save rules
+iptables-save > /etc/iptables/rules.v4
+
+# Restore rules
+iptables-restore < /etc/iptables/rules.v4
+```
+
+## SSH Troubleshooting Guide
+
+### When SSH Hangs - Quick Checks
+
+#### 1. Check if SSH Service is Running on Target
+```bash
+# On the victim/target machine (192.168.x.x):
+sudo systemctl status ssh
+sudo systemctl status sshd
+
+# If not running, start it:
+sudo systemctl start ssh
+sudo systemctl enable ssh
+```
+
+#### 2. Check if Port 22 is Open
+```bash
+# From attacker machine, check if port 22 is open:
+nmap -p 22 192.168.x.x
+telnet 192.168.x.x 22
+
+# Should show something like:
+# SSH-2.0-OpenSSH_8.9p1 Ubuntu-3ubuntu0.1
+```
+
+#### 3. Test Basic Network Connectivity
+```bash
+# Can you ping the target?
+ping 192.168.x.x
+
+# Can you reach other ports?
+nmap 192.168.x.x
+```
+
+#### 4. Check SSH Configuration
+```bash
+# On target machine, check SSH config:
+sudo nano /etc/ssh/sshd_config
+
+# Key settings to verify:
+Port 22
+PermitRootLogin yes  # or no, depending on your setup
+PasswordAuthentication yes
+PubkeyAuthentication yes
+```
+
+#### 5. Try SSH with Verbose Mode
+```bash
+# From attacker machine:
+ssh -v username@192.168.x.x
+
+# This will show you exactly where it's hanging
+```
+
+### Common SSH Hanging Issues
+
+#### Issue 1: SSH Service Not Running
+```bash
+# Solution on target machine:
+sudo apt update
+sudo apt install openssh-server
+sudo systemctl start ssh
+sudo systemctl enable ssh
+```
+
+#### Issue 2: Firewall Blocking Connection
+```bash
+# On target machine, temporarily disable firewall:
+sudo ufw disable
+
+# Or allow SSH specifically:
+sudo ufw allow ssh
+sudo ufw allow 22/tcp
+```
+
+#### Issue 3: Wrong Username
+```bash
+# Check what users exist on target:
+cat /etc/passwd | grep -E ":(100[0-9]|[0-9]{4}):" | cut -d: -f1
+
+# Or create a simple user:
+sudo useradd -m testuser
+sudo passwd testuser
+```
+
+#### Issue 4: DNS Resolution Issues
+```bash
+# Try SSH with IP address instead of hostname:
+ssh username@192.168.x.x
+
+# Add to /etc/hosts if needed:
+echo "192.168.x.x target-machine" | sudo tee -a /etc/hosts
+```
+
+### Quick Lab Setup Commands
+
+#### On Target Machine (192.168.x.x):
+```bash
+# Install and start SSH
+sudo apt update
+sudo apt install openssh-server
+sudo systemctl start ssh
+sudo systemctl enable ssh
+
+# Create test user
+sudo useradd -m labuser
+sudo passwd labuser
+# Enter simple password like "password123"
+
+# Check SSH is listening
+sudo netstat -tlnp | grep :22
+```
+
+#### On Attacker Machine (172.16.x.x):
+```bash
+# Test connection
+ssh labuser@192.168.x.x
+
+# If it hangs, try with verbose:
+ssh -v labuser@192.168.x.x
+```
+
+### Expected SSH Connection Flow
+```
+debug1: Reading configuration data /etc/ssh/ssh_config
+debug1: Connecting to 192.168.x.x [192.168.x.x] port 22.
+debug1: Connection established.
+debug1: Remote protocol version 2.0, remote software version OpenSSH_8.9p1
+debug1: Authenticating to 192.168.x.x:22 as 'labuser'
+labuser@192.168.x.x's password: 
+```
+
+### If Still Hanging - Check These:
+
+1. **Network Interface**: Make sure both machines are on correct networks
+2. **Routing**: Check if packets can flow between networks
+3. **SSH Keys**: Remove any old SSH keys that might conflict
+4. **Timeout Settings**: SSH might be waiting for authentication
+
+### Quick Fix Commands
+```bash
+# Remove old SSH keys
+rm ~/.ssh/known_hosts
+
+# Force password authentication
+ssh -o PreferredAuthentications=password labuser@192.168.x.x
+
+# Set shorter timeout
+ssh -o ConnectTimeout=10 labuser@192.168.x.x
+```
+
+## Final Reminders
+- Document everything with screenshots
+- Test all components before the exam
+- Practice explaining each step clearly
+- Have backup attack methods ready
+- Review network topology and IP assignments
+- Prepare for follow-up questions about security concepts
