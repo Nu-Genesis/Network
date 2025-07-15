@@ -1,0 +1,254 @@
+# Midterm Exam Prep Guide - SSH Attack Scenario
+
+## Exam Overview
+- **Total Points**: 35
+- **Networks**: 172.16.x.0/25 and 192.168.x.0/24
+- **Attack Method**: SSH connection/brute force
+- **Tools**: Kali Linux (attacker), Kali/Windows (victim), Snort/Suricata (IDS), Firewall
+
+## Task 1: Network Setup and SSH Attack (10 points)
+
+### Pre-Attack Setup
+1. **Verify Network Connectivity**
+   - Test routing between 172.16.x.0/25 and 192.168.x.0/24
+   - Use `ping` to confirm reachability
+   - Check routing tables with `route -n` or `ip route`
+
+2. **Machine Configuration**
+   - **Attacker (Kali)**: Connect to 172.16.x.0/25 network
+   - **Victim (Kali/Windows)**: Connect to 192.168.x.0/24 network
+   - Ensure SSH service is running on victim machine
+
+### SSH Attack Options
+
+#### Option A: SSH Brute Force Attack
+```bash
+# Using Hydra for SSH brute force
+hydra -l username -P /usr/share/wordlists/rockyou.txt ssh://[victim_ip]
+
+# Using Medusa
+medusa -h [victim_ip] -u username -P /usr/share/wordlists/rockyou.txt -M ssh
+
+# Using Ncrack
+ncrack -p 22 --user username -P /usr/share/wordlists/rockyou.txt [victim_ip]
+```
+
+#### Option B: SSH Connection with Suspicious Patterns
+```bash
+# Multiple failed login attempts
+ssh username@[victim_ip] -p 22
+# Try different usernames: admin, root, test, etc.
+
+# SSH port scanning
+nmap -p 22 [victim_ip]
+nmap -sS -p 22 [victim_ip]
+```
+
+### Documentation for Task 1
+- Screenshot of successful connection between networks
+- Evidence of SSH attack (command output, failed login attempts)
+- Wireshark capture showing SSH traffic
+
+## Task 2: IDS Rule Creation (5 points)
+
+### Snort Rules for SSH Detection
+
+#### Rule 1: SSH Brute Force Detection
+```bash
+alert tcp any any -> $HOME_NET 22 (msg:"SSH Brute Force Attack"; flow:to_server,established; content:"SSH-"; offset:0; depth:4; detection_filter:track by_src, count 5, seconds 60; sid:1000001; rev:1;)
+```
+
+#### Rule 2: Multiple SSH Connection Attempts
+```bash
+alert tcp any any -> $HOME_NET 22 (msg:"Multiple SSH Login Attempts"; flow:to_server,established; content:"SSH-2.0"; threshold:type threshold, track by_src, count 10, seconds 60; sid:1000002; rev:1;)
+```
+
+#### Rule 3: SSH Authentication Failure
+```bash
+alert tcp any any -> $HOME_NET 22 (msg:"SSH Authentication Failure"; flow:to_server,established; content:"Authentication failed"; sid:1000003; rev:1;)
+```
+
+### Suricata Rules Alternative
+```bash
+alert ssh any any -> $HOME_NET 22 (msg:"SSH Brute Force Detected"; flow:to_server; ssh.protoversion:2.0; threshold:type threshold, track by_src, count 5, seconds 60; sid:2000001; rev:1;)
+```
+
+### IDS Configuration Steps
+1. **Edit Snort Configuration**
+   ```bash
+   sudo nano /etc/snort/snort.conf
+   # Add custom rules to local.rules
+   ```
+
+2. **Test Rules**
+   ```bash
+   sudo snort -T -c /etc/snort/snort.conf
+   ```
+
+3. **Run IDS**
+   ```bash
+   sudo snort -A console -q -c /etc/snort/snort.conf -i eth0
+   ```
+
+## Task 3: Firewall Rule Implementation (5 points)
+
+### Iptables Rules (Linux)
+
+#### Option 1: Block SSH from Specific Source
+```bash
+# Block SSH from attacker IP
+iptables -A INPUT -s [attacker_ip] -p tcp --dport 22 -j DROP
+
+# Block SSH brute force attempts
+iptables -A INPUT -p tcp --dport 22 -m conntrack --ctstate NEW -m recent --set --name SSH
+iptables -A INPUT -p tcp --dport 22 -m conntrack --ctstate NEW -m recent --update --seconds 60 --hitcount 4 --name SSH -j DROP
+```
+
+#### Option 2: Rate Limiting SSH Connections
+```bash
+# Limit SSH connections per minute
+iptables -A INPUT -p tcp --dport 22 -m conntrack --ctstate NEW -m recent --set --name SSH
+iptables -A INPUT -p tcp --dport 22 -m conntrack --ctstate NEW -m recent --update --seconds 60 --hitcount 3 --name SSH -j DROP
+```
+
+### Windows Firewall Rules
+```powershell
+# Block specific IP from SSH access
+New-NetFirewallRule -DisplayName "Block SSH from Attacker" -Direction Inbound -Protocol TCP -LocalPort 22 -RemoteAddress [attacker_ip] -Action Block
+
+# Block SSH brute force
+New-NetFirewallRule -DisplayName "SSH Rate Limit" -Direction Inbound -Protocol TCP -LocalPort 22 -DynamicTarget Any -Action Block
+```
+
+### pfSense/Hardware Firewall
+1. Navigate to Firewall → Rules
+2. Create rule:
+   - Action: Block
+   - Protocol: TCP
+   - Source: [attacker_network/IP]
+   - Destination Port: 22
+   - Description: "Block SSH from attacker"
+
+## Task 4: Knowledge Questions Preparation (15 points)
+
+### Key Topics to Review
+
+#### Network Security Fundamentals
+- **CIA Triad**: Confidentiality, Integrity, Availability
+- **Defense in Depth**: Multiple layers of security
+- **Network Segmentation**: Isolating network segments
+- **VLANs and Subnetting**: Network isolation techniques
+
+#### Intrusion Detection Systems
+- **Signature-based vs Anomaly-based**: Detection methods
+- **IDS vs IPS**: Detection vs Prevention
+- **Snort Rule Syntax**: Components and structure
+- **False Positives/Negatives**: Understanding detection accuracy
+
+#### Firewall Technologies
+- **Stateful vs Stateless**: Firewall types
+- **Access Control Lists (ACLs)**: Rule-based filtering
+- **NAT and PAT**: Network Address Translation
+- **DMZ Configuration**: Demilitarized zone setup
+
+#### Attack Vectors and Mitigation
+- **Brute Force Attacks**: Methods and prevention
+- **Port Scanning**: Detection and blocking
+- **SSH Hardening**: Security best practices
+- **Log Analysis**: Identifying attack patterns
+
+### Sample Questions to Practice
+1. What are the differences between IDS and IPS?
+2. Explain the components of a Snort rule.
+3. How does stateful firewall inspection work?
+4. What are the signs of a brute force attack?
+5. Describe the principle of least privilege.
+
+## Demonstration Checklist
+
+### Pre-Demo Preparation
+- [ ] Both networks (172.16.x.0/25 and 192.168.x.0/24) are communicating
+- [ ] SSH service is running on victim machine
+- [ ] IDS is configured and running
+- [ ] Firewall rules are prepared but not yet implemented
+- [ ] Wireshark is ready for packet capture
+
+### Demo Sequence
+1. **Show Network Connectivity**
+   - Ping between networks
+   - Show routing table
+
+2. **Perform SSH Attack**
+   - Execute brute force or connection attempts
+   - Show attack in progress
+
+3. **Demonstrate IDS Detection**
+   - Show IDS alerts triggering
+   - Explain rule that detected the attack
+
+4. **Implement Firewall Rule**
+   - Add specific firewall rule
+   - Show attack being blocked
+   - Verify rule effectiveness
+
+5. **Explain Security Measures**
+   - Discuss why this rule is effective
+   - Explain how it's specific to the attack
+
+## Commands Reference
+
+### Network Testing
+```bash
+# Check connectivity
+ping [target_ip]
+
+# Check routing
+route -n
+ip route show
+
+# Check open ports
+nmap -sS [target_ip]
+```
+
+### Log Monitoring
+```bash
+# Monitor SSH logs
+tail -f /var/log/auth.log
+tail -f /var/log/secure
+
+# Monitor Snort logs
+tail -f /var/log/snort/alert
+```
+
+### Firewall Management
+```bash
+# Check current rules
+iptables -L -n
+
+# Save rules
+iptables-save > /etc/iptables/rules.v4
+
+# Restore rules
+iptables-restore < /etc/iptables/rules.v4
+```
+
+## Troubleshooting Tips
+
+### Common Issues
+1. **SSH not responding**: Check if SSH service is running
+2. **IDS not triggering**: Verify rule syntax and network interface
+3. **Firewall blocking everything**: Check rule order and specificity
+4. **Network connectivity issues**: Verify routing and IP configuration
+
+### Quick Fixes
+- Restart SSH service: `sudo systemctl restart ssh`
+- Reload firewall rules: `sudo iptables -F && sudo iptables-restore < rules.txt`
+- Check IDS interface: `sudo snort -i eth0 -c /etc/snort/snort.conf`
+
+## Final Reminders
+- Document everything with screenshots
+- Test all components before the exam
+- Practice explaining each step clearly
+- Have backup attack methods ready
+- Review network topology and IP assignments
+- Prepare for follow-up questions about security concepts
