@@ -51,21 +51,26 @@ nmap -sS -p 22 [victim_ip]
 
 ## Task 2: IDS Rule Creation (5 points)
 
-### Snort Rules for SSH Detection
+### Snort Rules for Simple SSH Detection
 
-#### Rule 1: SSH Brute Force Detection
+#### Rule 1: Basic SSH Connection Detection (Simplest)
 ```bash
-alert tcp any any -> $HOME_NET 22 (msg:"SSH Brute Force Attack"; flow:to_server,established; content:"SSH-"; offset:0; depth:4; detection_filter:track by_src, count 5, seconds 60; sid:1000001; rev:1;)
+alert tcp any any -> any 22 (msg:"SSH Connection Detected"; sid:1000001; rev:1;)
 ```
 
-#### Rule 2: Multiple SSH Connection Attempts
+#### Rule 2: SSH Protocol Version Detection
 ```bash
-alert tcp any any -> $HOME_NET 22 (msg:"Multiple SSH Login Attempts"; flow:to_server,established; content:"SSH-2.0"; threshold:type threshold, track by_src, count 10, seconds 60; sid:1000002; rev:1;)
+alert tcp any any -> any 22 (msg:"SSH Protocol Detected"; content:"SSH-"; offset:0; depth:4; sid:1000002; rev:1;)
 ```
 
-#### Rule 3: SSH Authentication Failure
+#### Rule 3: SSH Connection from Specific Network (Most Targeted)
 ```bash
-alert tcp any any -> $HOME_NET 22 (msg:"SSH Authentication Failure"; flow:to_server,established; content:"Authentication failed"; sid:1000003; rev:1;)
+alert tcp 172.16.0.0/16 any -> 192.168.0.0/16 22 (msg:"SSH Connection from 172.16.x.x to 192.168.x.x"; sid:1000003; rev:1;)
+```
+
+#### Rule 4: SSH with Flow State (Recommended for Lab)
+```bash
+alert tcp any any -> any 22 (msg:"SSH Connection Attempt"; flow:to_server,established; sid:1000004; rev:1;)
 ```
 
 ### Suricata Rules Alternative
@@ -73,22 +78,42 @@ alert tcp any any -> $HOME_NET 22 (msg:"SSH Authentication Failure"; flow:to_ser
 alert ssh any any -> $HOME_NET 22 (msg:"SSH Brute Force Detected"; flow:to_server; ssh.protoversion:2.0; threshold:type threshold, track by_src, count 5, seconds 60; sid:2000001; rev:1;)
 ```
 
-### IDS Configuration Steps
-1. **Edit Snort Configuration**
-   ```bash
-   sudo nano /etc/snort/snort.conf
-   # Add custom rules to local.rules
-   ```
+### Quick Snort Setup for Lab
 
-2. **Test Rules**
-   ```bash
-   sudo snort -T -c /etc/snort/snort.conf
-   ```
+#### Step 1: Create Simple Rule File
+```bash
+# Create a simple rules file
+sudo nano /etc/snort/rules/ssh.rules
 
-3. **Run IDS**
-   ```bash
-   sudo snort -A console -q -c /etc/snort/snort.conf -i eth0
-   ```
+# Add this single rule:
+alert tcp any any -> any 22 (msg:"SSH Connection Detected"; sid:1000001; rev:1;)
+```
+
+#### Step 2: Test the Rule
+```bash
+# Test rule syntax
+sudo snort -T -c /etc/snort/snort.conf
+
+# Run Snort in console mode to see alerts immediately
+sudo snort -A console -q -c /etc/snort/snort.conf -i eth0
+```
+
+#### Step 3: Make Your SSH Connection
+```bash
+# From your attacker machine (172.16.x.x):
+ssh username@192.168.x.x -p 22
+
+# This should trigger the Snort alert immediately
+```
+
+### Expected Snort Output
+```
+[**] [1:1000001:1] SSH Connection Detected [**]
+[Priority: 0] 
+12/15-10:30:45.123456 172.16.x.x:54321 -> 192.168.x.x:22
+TCP TTL:64 TOS:0x0 ID:12345 IpLen:20 DgmLen:60 DF
+***A**S* Seq: 0x12345678  Ack: 0x0  Win: 0x7210  TcpLen: 40
+```
 
 ## Task 3: Firewall Rule Implementation (5 points)
 
