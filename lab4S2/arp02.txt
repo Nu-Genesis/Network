@@ -3,8 +3,6 @@ alert ip any any -> any any (msg:"Potential ARP Spoofing - Duplicate IP Traffic"
 
 alert ip any any -> any any (msg:"Ettercap ARP Poisoning Tool Detected"; content:"ettercap"; nocase; sid:1000002; rev:1;)
 
-# Rule 3: Detect rapid IP address changes (often indicates ARP poisoning)
-# Look for same source IP appearing from different locations quickly
 alert ip any any -> any any (msg:"Rapid IP Address Changes - Possible ARP Attack"; threshold:type both, track by_src, count 10, seconds 30; sid:1000003; rev:1;)
 
 alert icmp any any -> any any (msg:"Suspicious ICMP During Potential ARP Attack"; threshold:type both, track by_src, count 50, seconds 60; sid:1000004; rev:1;)
