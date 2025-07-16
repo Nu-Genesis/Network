@@ -1,19 +1,35 @@
-alert tcp any any -> any any (msg:"ARP Spoofing Attack Detected"; flow:established; threshold:type both, track by_src, count 10, seconds 60; sid:1000001; rev:1;)
 
-alert arp any any -> any any (msg:"ARP Flood Attack Detected"; threshold:type both, track by_src, count 50, seconds 30; sid:1000002; rev:1;)
+alert ip any any -> any any (msg:"Potential ARP Spoofing - Duplicate IP Traffic"; threshold:type both, track by_src, count 20, seconds 60; sid:1000001; rev:1;)
 
-alert arp any any -> any any (msg:"Suspicious Gratuitous ARP Detected"; arp_opcode:reply; threshold:type both, track by_src, count 20, seconds 60; sid:1000003; rev:1;)
+alert ip any any -> any any (msg:"Ettercap ARP Poisoning Tool Detected"; content:"ettercap"; nocase; sid:1000002; rev:1;)
 
-alert arp any any -> any any (msg:"ARP Request Storm Detected"; arp_opcode:request; threshold:type both, track by_src, count 100, seconds 60; sid:1000004; rev:1;)
+# Rule 3: Detect rapid IP address changes (often indicates ARP poisoning)
+# Look for same source IP appearing from different locations quickly
+alert ip any any -> any any (msg:"Rapid IP Address Changes - Possible ARP Attack"; threshold:type both, track by_src, count 10, seconds 30; sid:1000003; rev:1;)
 
-alert arp any any -> any any (msg:"Unsolicited ARP Reply Detected"; arp_opcode:reply; threshold:type both, track by_src, count 5, seconds 10; sid:1000005; rev:1;)
+alert icmp any any -> any any (msg:"Suspicious ICMP During Potential ARP Attack"; threshold:type both, track by_src, count 50, seconds 60; sid:1000004; rev:1;)
 
-alert arp any any -> any any (msg:"Duplicate IP Address Detected - Possible ARP Spoofing"; arp_opcode:reply; threshold:type both, track by_dst, count 3, seconds 30; sid:1000006; rev:1;)
+alert tcp any any -> any any (msg:"ARP Scan Follow-up TCP Probes"; flags:S; threshold:type both, track by_src, count 30, seconds 45; sid:1000005; rev:1;)
 
-alert arp any any -> any any (msg:"Malformed ARP Packet - Broadcast Source MAC"; content:"|ff ff ff ff ff ff|"; offset:6; depth:6; sid:1000007; rev:1;)
+alert tcp any any -> any any (msg:"MITM Attack Pattern Detected"; flow:established; threshold:type both, track by_src, count 15, seconds 30; sid:1000006; rev:1;)
 
-alert arp any any -> any any (msg:"Malformed ARP Packet - Null MAC Address"; content:"|00 00 00 00 00 00|"; sid:1000008; rev:1;)
+alert tcp any any -> any any (msg:"Bettercap ARP Attack Tool Detected"; content:"bettercap"; nocase; sid:1000007; rev:1;)
 
-alert arp any any -> any any (msg:"ARP Table Poisoning Pattern Detected"; arp_opcode:reply; threshold:type both, track by_src, count 15, seconds 20; sid:1000009; rev:1;)
+alert tcp any any -> any any (msg:"Network Anomaly - Possible ARP Spoofing"; threshold:type both, track by_dst, count 25, seconds 40; sid:1000008; rev:1;)
 
-alert arp any any -> any any (msg:"ARP Reconnaissance Scan Detected"; arp_opcode:request; threshold:type both, track by_src, count 30, seconds 45; sid:1000010; rev:1;)
+
+alert icmp any any -> any any (msg:"Ping Sweep - Potential ARP Attack Preparation"; itype:8; threshold:type both, track by_src, count 20, seconds 30; sid:1000009; rev:1;)
+
+alert tcp any any -> any any (msg:"Session Hijacking Attempt Post-ARP Attack"; flags:A; threshold:type both, track by_src, count 30, seconds 45; sid:1000010; rev:1;)
+
+
+alert tcp any any -> any any (msg:"dsniff/arpspoof Tool Detected"; content:"arpspoof"; nocase; sid:1000011; rev:1;)
+
+
+alert tcp any any -> any any (msg:"Cain & Abel ARP Attack Detected"; content:"cain"; nocase; sid:1000012; rev:1;)
+
+alert ip any any -> $HOME_NET any (msg:"Abnormal Gateway Traffic - Possible ARP Redirect"; threshold:type both, track by_src, count 100, seconds 60; sid:1000013; rev:1;)
+
+alert tcp any any -> any 443 (msg:"Potential SSL MITM via ARP Attack"; content:"certificate"; nocase; sid:1000014; rev:1;)
+
+alert udp any any -> any 53 (msg:"DNS Poisoning Post-ARP Attack"; threshold:type both, track by_src, count 50, seconds 60; sid:1000015; rev:1;)
