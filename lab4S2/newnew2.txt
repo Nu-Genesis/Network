@@ -1,0 +1,239 @@
+Snort Rules for ARP and DHCP Spoofing Detection and Prevention
+Overview
+
+This guide provides custom Snort rules for detecting and preventing ARP spoofing and DHCP spoofing attacks in pfSense environments.
+Prerequisites
+
+    pfSense with Snort package installed
+    Basic understanding of your network topology
+    Knowledge of legitimate MAC addresses and IP ranges in your network
+
+Part 1: ARP Spoofing Detection and Prevention Rules
+1.1 Basic ARP Spoofing Detection Rules
+bash
+
+# ARP Spoofing Detection Rules for pfSense Snort
+
+# Detect ARP replies for gateway IP from unauthorized MAC
+# Replace 192.168.1.1 with your actual gateway IP
+# Replace 00:11:22:33:44:55 with your legitimate gateway MAC
+alert tcp $HOME_NET any -> $HOME_NET any (msg:"ARP Spoofing - Fake Gateway Response"; content:"|08 06|"; content:"|00 02|"; content:"|c0 a8 01 01|"; content:!"00:11:22:33:44:55"; sid:2000001; rev:1; classtype:network-scan;)
+
+# Detect excessive ARP replies (ARP flooding)
+alert tcp $HOME_NET any -> $HOME_NET any (msg:"ARP Spoofing - Excessive ARP Replies"; content:"|08 06|"; content:"|00 02|"; threshold:type threshold, track by_src, count 10, seconds 60; sid:2000002; rev:1; classtype:network-scan;)
+
+# Detect ARP replies with duplicate IP addresses
+alert tcp $HOME_NET any -> $HOME_NET any (msg:"ARP Spoofing - Duplicate IP Detection"; content:"|08 06|"; content:"|00 02|"; threshold:type threshold, track by_dst, count 2, seconds 10; sid:2000003; rev:1; classtype:network-scan;)
+
+# Detect gratuitous ARP with suspicious timing
+alert tcp $HOME_NET any -> $HOME_NET any (msg:"ARP Spoofing - Gratuitous ARP Flood"; content:"|08 06|"; content:"|00 01|"; threshold:type threshold, track by_src, count 5, seconds 30; sid:2000004; rev:1; classtype:network-scan;)
+
+# Detect ARP requests for gateway from multiple MAC addresses
+alert tcp $HOME_NET any -> $HOME_NET any (msg:"ARP Spoofing - Multiple MACs Claiming Gateway"; content:"|08 06|"; content:"|00 01|"; content:"|c0 a8 01 01|"; threshold:type threshold, track by_dst, count 3, seconds 60; sid:2000005; rev:1; classtype:network-scan;)
+
+1.2 Advanced ARP Spoofing Detection Rules
+bash
+
+# Detect ARP cache poisoning attempts
+alert tcp $HOME_NET any -> $HOME_NET any (msg:"ARP Cache Poisoning - Unsolicited ARP Reply"; content:"|08 06|"; content:"|00 02|"; pcre:"/^(?!.*legitimate_mac_pattern)/"; sid:2000006; rev:1; classtype:network-scan;)
+
+# Detect ARP spoofing targeting specific high-value hosts
+# Replace 192.168.1.100 with your server IP
+alert tcp $HOME_NET any -> $HOME_NET any (msg:"ARP Spoofing - Targeting Critical Server"; content:"|08 06|"; content:"|00 02|"; content:"|c0 a8 01 64|"; sid:2000007; rev:1; classtype:network-scan; priority:1;)
+
+# Detect MAC address changes for known IP addresses
+alert tcp $HOME_NET any -> $HOME_NET any (msg:"ARP Spoofing - MAC Address Change Detected"; content:"|08 06|"; content:"|00 02|"; detection_filter:track by_dst, count 1, seconds 3600; sid:2000008; rev:1; classtype:network-scan;)
+
+1.3 ARP Spoofing Prevention Rules (Drop Rules)
+bash
+
+# DROP rules for ARP spoofing prevention
+# Note: Use these carefully as they can block legitimate traffic if misconfigured
+
+# Drop ARP replies from unauthorized MAC for gateway
+drop tcp $HOME_NET any -> $HOME_NET any (msg:"ARP Spoofing Prevention - Blocking Fake Gateway"; content:"|08 06|"; content:"|00 02|"; content:"|c0 a8 01 01|"; content:!"00:11:22:33:44:55"; sid:2000009; rev:1; classtype:network-scan;)
+
+# Drop excessive ARP replies
+drop tcp $HOME_NET any -> $HOME_NET any (msg:"ARP Spoofing Prevention - Blocking ARP Flood"; content:"|08 06|"; content:"|00 02|"; threshold:type threshold, track by_src, count 20, seconds 60; sid:2000010; rev:1; classtype:network-scan;)
+
+# Drop gratuitous ARP floods
+drop tcp $HOME_NET any -> $HOME_NET any (msg:"ARP Spoofing Prevention - Blocking Gratuitous ARP Flood"; content:"|08 06|"; content:"|00 01|"; threshold:type threshold, track by_src, count 10, seconds 30; sid:2000011; rev:1; classtype:network-scan;)
+
+Part 2: DHCP Spoofing Detection and Prevention Rules
+2.1 Basic DHCP Spoofing Detection Rules
+bash
+
+# DHCP Spoofing Detection Rules
+
+# Detect DHCP OFFER from unauthorized DHCP server
+# Replace 192.168.1.1 with your legitimate DHCP server IP
+alert udp !192.168.1.1 67 -> $HOME_NET 68 (msg:"DHCP Spoofing - Unauthorized DHCP Server OFFER"; content:"|35 01 02|"; sid:2000012; rev:1; classtype:network-scan;)
+
+# Detect DHCP ACK from unauthorized server
+alert udp !192.168.1.1 67 -> $HOME_NET 68 (msg:"DHCP Spoofing - Unauthorized DHCP Server ACK"; content:"|35 01 05|"; sid:2000013; rev:1; classtype:network-scan;)
+
+# Detect multiple DHCP servers responding
+alert udp any 67 -> $HOME_NET 68 (msg:"DHCP Spoofing - Multiple DHCP Servers Detected"; content:"|35 01 02|"; threshold:type threshold, track by_dst, count 2, seconds 10; sid:2000014; rev:1; classtype:network-scan;)
+
+# Detect DHCP server on client port (unusual configuration)
+alert udp $HOME_NET 68 -> $HOME_NET any (msg:"DHCP Spoofing - DHCP Server on Client Port"; content:"|35 01 02|"; sid:2000015; rev:1; classtype:network-scan;)
+
+# Detect DHCP DISCOVER flood (potential DoS)
+alert udp $HOME_NET any -> any 67 (msg:"DHCP Spoofing - DISCOVER Flood"; content:"|35 01 01|"; threshold:type threshold, track by_src, count 10, seconds 60; sid:2000016; rev:1; classtype:network-scan;)
+
+2.2 Advanced DHCP Spoofing Detection Rules
+bash
+
+# Detect DHCP responses with suspicious options
+alert udp any 67 -> $HOME_NET 68 (msg:"DHCP Spoofing - Suspicious Gateway Option"; content:"|35 01 02|"; content:"|03 04|"; content:!"c0 a8 01 01"; sid:2000017; rev:1; classtype:network-scan;)
+
+# Detect DHCP responses with suspicious DNS servers
+alert udp any 67 -> $HOME_NET 68 (msg:"DHCP Spoofing - Suspicious DNS Server"; content:"|35 01 02|"; content:"|06 04|"; content:!"c0 a8 01 01"; sid:2000018; rev:1; classtype:network-scan;)
+
+# Detect DHCP NAK attacks
+alert udp any 67 -> $HOME_NET 68 (msg:"DHCP Spoofing - DHCP NAK Attack"; content:"|35 01 06|"; threshold:type threshold, track by_src, count 5, seconds 30; sid:2000019; rev:1; classtype:network-scan;)
+
+# Detect DHCP RELEASE attacks
+alert udp $HOME_NET 68 -> any 67 (msg:"DHCP Spoofing - Suspicious DHCP RELEASE"; content:"|35 01 07|"; threshold:type threshold, track by_src, count 5, seconds 60; sid:2000020; rev:1; classtype:network-scan;)
+
+2.3 DHCP Spoofing Prevention Rules (Drop Rules)
+bash
+
+# DROP rules for DHCP spoofing prevention
+
+# Drop DHCP OFFER from unauthorized servers
+drop udp !192.168.1.1 67 -> $HOME_NET 68 (msg:"DHCP Spoofing Prevention - Blocking Unauthorized DHCP OFFER"; content:"|35 01 02|"; sid:2000021; rev:1; classtype:network-scan;)
+
+# Drop DHCP ACK from unauthorized servers
+drop udp !192.168.1.1 67 -> $HOME_NET 68 (msg:"DHCP Spoofing Prevention - Blocking Unauthorized DHCP ACK"; content:"|35 01 05|"; sid:2000022; rev:1; classtype:network-scan;)
+
+# Drop excessive DHCP DISCOVER requests
+drop udp $HOME_NET any -> any 67 (msg:"DHCP Spoofing Prevention - Blocking DISCOVER Flood"; content:"|35 01 01|"; threshold:type threshold, track by_src, count 15, seconds 60; sid:2000023; rev:1; classtype:network-scan;)
+
+# Drop DHCP responses with malicious gateway
+drop udp any 67 -> $HOME_NET 68 (msg:"DHCP Spoofing Prevention - Blocking Malicious Gateway"; content:"|35 01 02|"; content:"|03 04|"; content:!"c0 a8 01 01"; sid:2000024; rev:1; classtype:network-scan;)
+
+Part 3: Implementation in pfSense
+3.1 Adding Rules to pfSense Snort
+
+    Navigate to Services > Snort > Rules
+    Select your interface
+    Click on local.rules or create a new custom rules file
+    Add the rules from above, customizing IP addresses and MAC addresses for your network
+
+3.2 Configuration Variables for pfSense
+bash
+
+# Add these to your pfSense Snort configuration
+# Navigate to Services > Snort > Interface Settings > Variables
+
+# Define your network variables
+HOME_NET: 192.168.1.0/24
+EXTERNAL_NET: !$HOME_NET
+
+# Define your legitimate DHCP server
+DHCP_SERVER: 192.168.1.1/32
+
+# Define your gateway
+GATEWAY: 192.168.1.1/32
+
+3.3 Rule Customization for Your Network
+
+Before implementing, customize these values:
+bash
+
+# Replace these values with your actual network information:
+# - 192.168.1.1 → Your actual gateway IP
+# - 192.168.1.0/24 → Your actual network range
+# - 00:11:22:33:44:55 → Your actual gateway MAC address
+# - c0 a8 01 01 → Hex representation of your gateway IP
+# - c0 a8 01 64 → Hex representation of target server IP (192.168.1.100)
+
+Part 4: Testing Your Rules
+4.1 Testing ARP Spoofing Detection
+bash
+
+# Use ettercap to perform ARP spoofing (on attacker machine)
+ettercap -T -M arp:remote /192.168.1.1// /192.168.1.100//
+
+# Or use arpspoof
+arpspoof -i eth0 -t 192.168.1.100 192.168.1.1
+
+4.2 Testing DHCP Spoofing Detection
+bash
+
+# Use yersinia to perform DHCP spoofing
+yersinia -I
+
+# Or use dhcpstarv for DHCP starvation
+dhcpstarv -i eth0
+
+4.3 Monitoring Alerts
+
+    Navigate to Services > Snort > Alerts
+    Monitor real-time alerts during your attacks
+    Check for the custom rule alerts (SID 2000001-2000024)
+
+Part 5: Lab Report Documentation
+5.1 Evidence to Collect
+
+    Screenshots of:
+        Snort rules configuration in pfSense
+        Alert logs showing detection of attacks
+        Network traffic during attacks
+        Blocked traffic logs (if using drop rules)
+    Analysis to Include:
+        Effectiveness of detection rules
+        False positive rates
+        Impact of prevention rules on legitimate traffic
+        Recommendations for rule tuning
+
+5.2 Attack Documentation
+
+For ARP Spoofing:
+
+    Document the attack methodology
+    Show before/after ARP table states
+    Demonstrate traffic interception
+    Show Snort detection and prevention
+
+For DHCP Spoofing:
+
+    Document rogue DHCP server setup
+    Show client configuration changes
+    Demonstrate DNS/Gateway redirection
+    Show Snort detection and prevention
+
+Part 6: Troubleshooting
+6.1 Common Issues
+
+    Rules not triggering:
+        Check IP address ranges
+        Verify content matching patterns
+        Ensure interface is correctly configured
+    False positives:
+        Adjust threshold values
+        Refine content matching
+        Add exception rules for legitimate traffic
+    Performance issues:
+        Optimize rule order
+        Use fast_pattern keyword
+        Consider rule priorities
+
+6.2 Rule Optimization
+bash
+
+# Optimized rule example with fast_pattern
+alert udp !$DHCP_SERVER 67 -> $HOME_NET 68 (msg:"DHCP Spoofing - Unauthorized Server"; content:"|35 01 02|"; fast_pattern; sid:2000025; rev:1; classtype:network-scan;)
+
+Security Considerations
+
+    Prevention vs Detection: Use drop rules carefully to avoid blocking legitimate traffic
+    Network Segmentation: Consider VLAN isolation for sensitive systems
+    Monitoring: Implement centralized logging for forensic analysis
+    Regular Updates: Keep rules updated based on network changes
+    Testing: Regularly test rules in a controlled environment
+
+Conclusion
+
+These rules provide comprehensive detection and prevention capabilities for ARP and DHCP spoofing attacks. Remember to customize all IP addresses, MAC addresses, and network ranges to match your specific lab environment before implementation.
