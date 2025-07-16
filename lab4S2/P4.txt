@@ -1,0 +1,219 @@
+# Snort Configuration for Port Knocking Detection Lab
+
+## Overview
+This guide will help you configure Snort to detect port knocking sequences and SSH login attempts for your cybersecurity lab.
+
+## Prerequisites
+- Snort installed and configured on your monitoring machine
+- Basic Snort configuration file (`snort.conf`) already set up
+- Network access to monitor traffic between your knock client and SSH server
+
+## Part 1: Basic Snort Setup for This Lab
+
+### 1.1 Configure Snort Network Variables
+Edit your `snort.conf` file and ensure these variables are set correctly:
+
+```bash
+# Define your home network (adjust to match your lab network)
+ipvar HOME_NET 192.168.1.0/24
+
+# Define external network
+ipvar EXTERNAL_NET !$HOME_NET
+
+# Define SSH server IP (replace with your actual SSH server IP)
+ipvar SSH_SERVER 192.168.1.100/32
+```
+
+### 1.2 Enable Required Preprocessors
+Ensure these preprocessors are enabled in your `snort.conf`:
+
+```bash
+# Stream preprocessor for TCP reassembly
+preprocessor stream5_global
+preprocessor stream5_tcp
+
+# Port scan detection
+preprocessor sfportscan: \
+    proto { all } \
+    memcap { 10000000 } \
+    sense_level { low }
+```
+
+## Part 2: Custom Rules for Port Knocking Detection
+
+Create a custom rules file: `/etc/snort/rules/local.rules`
+
+### 2.1 Port Knocking Sequence Detection
+
+```bash
+# Port Knocking Detection Rules
+# Replace port numbers with your actual knock sequence
+
+# Detect first knock (example: port 1234)
+alert tcp $EXTERNAL_NET any -> $SSH_SERVER 1234 (msg:"Port Knock Sequence - First Knock Detected"; flags:S; sid:1000001; rev:1;)
+
+# Detect second knock (example: port 2345)
+alert tcp $EXTERNAL_NET any -> $SSH_SERVER 2345 (msg:"Port Knock Sequence - Second Knock Detected"; flags:S; sid:1000002; rev:1;)
+
+# Detect third knock (example: port 3456)
+alert tcp $EXTERNAL_NET any -> $SSH_SERVER 3456 (msg:"Port Knock Sequence - Third Knock Detected"; flags:S; sid:1000003; rev:1;)
+
+# Detect rapid sequence of knocks (potential port knocking)
+alert tcp $EXTERNAL_NET any -> $SSH_SERVER any (msg:"Potential Port Knocking - Multiple Connection Attempts"; flags:S; threshold:type threshold, track by_src, count 3, seconds 10; sid:1000004; rev:1;)
+```
+
+### 2.2 SSH Login Attempt Detection
+
+```bash
+# SSH Connection Detection
+alert tcp $EXTERNAL_NET any -> $SSH_SERVER 22 (msg:"SSH Connection Attempt"; flags:S; sid:1000005; rev:1;)
+
+# SSH Login Success Detection
+alert tcp $SSH_SERVER 22 -> $EXTERNAL_NET any (msg:"SSH Login - Server Response"; content:"SSH-2.0"; sid:1000006; rev:1;)
+
+# SSH Brute Force Detection
+alert tcp $EXTERNAL_NET any -> $SSH_SERVER 22 (msg:"Potential SSH Brute Force"; flags:S; threshold:type threshold, track by_src, count 5, seconds 60; sid:1000007; rev:1;)
+
+# Failed SSH Login Detection (looking for connection resets)
+alert tcp $SSH_SERVER 22 -> $EXTERNAL_NET any (msg:"SSH Connection Reset - Possible Failed Login"; flags:R; sid:1000008; rev:1;)
+```
+
+### 2.3 Bonus: Port Scanning Detection
+
+```bash
+# Port Scan Detection Rules
+alert tcp $EXTERNAL_NET any -> $SSH_SERVER any (msg:"Port Scan Detected - TCP SYN Scan"; flags:S; threshold:type threshold, track by_src, count 10, seconds 5; sid:1000009; rev:1;)
+
+# Detect TCP Connect Scan
+alert tcp $EXTERNAL_NET any -> $SSH_SERVER any (msg:"TCP Connect Scan Detected"; flags:S; threshold:type threshold, track by_src, count 15, seconds 10; sid:1000010; rev:1;)
+
+# Detect SYN-FIN Scan (stealth scan)
+alert tcp $EXTERNAL_NET any -> $SSH_SERVER any (msg:"SYN-FIN Stealth Scan Detected"; flags:SF; sid:1000011; rev:1;)
+
+# Detect NULL Scan
+alert tcp $EXTERNAL_NET any -> $SSH_SERVER any (msg:"NULL Scan Detected"; flags:0; sid:1000012; rev:1;)
+
+# Detect XMAS Scan
+alert tcp $EXTERNAL_NET any -> $SSH_SERVER any (msg:"XMAS Scan Detected"; flags:FPU; sid:1000013; rev:1;)
+```
+
+## Part 3: Running Snort for Detection
+
+### 3.1 Test Configuration
+Before running, test your configuration:
+
+```bash
+sudo snort -T -c /etc/snort/snort.conf
+```
+
+### 3.2 Run Snort in IDS Mode
+Run Snort to monitor your network interface:
+
+```bash
+# Replace eth0 with your actual network interface
+sudo snort -A console -q -c /etc/snort/snort.conf -i eth0
+```
+
+### 3.3 Run Snort with Logging
+To save alerts to files:
+
+```bash
+sudo snort -A fast -b -d -q -c /etc/snort/snort.conf -i eth0 -l /var/log/snort
+```
+
+## Part 4: Testing Your Setup
+
+### 4.1 Test Port Knocking Detection
+1. From your client machine, perform the port knocking sequence
+2. Check Snort alerts for detection of the knock sequence
+3. Verify SSH connection attempts are logged
+
+### 4.2 Test SSH Detection
+1. Attempt SSH login after port knocking
+2. Check for SSH connection alerts
+3. Try failed login attempts to test brute force detection
+
+### 4.3 Test Port Scanning Detection (Bonus)
+Use nmap to test port scanning detection:
+
+```bash
+# TCP SYN scan
+nmap -sS [SSH_SERVER_IP]
+
+# TCP Connect scan
+nmap -sT [SSH_SERVER_IP]
+
+# Stealth scans
+nmap -sF [SSH_SERVER_IP]  # FIN scan
+nmap -sN [SSH_SERVER_IP]  # NULL scan
+nmap -sX [SSH_SERVER_IP]  # XMAS scan
+```
+
+## Part 5: Analyzing Results
+
+### 5.1 Reading Snort Alerts
+Alerts will show in the format:
+```
+[**] [1:1000001:1] Port Knock Sequence - First Knock Detected [**]
+[Priority: 0] 
+MM/DD-HH:MM:SS.ssssss CLIENT_IP:PORT -> SERVER_IP:PORT
+TCP TTL:64 TOS:0x0 ID:12345 IpLen:20 DgmLen:60 DF
+***S**** Seq: 0x12345678  Ack: 0x0  Win: 0x7210  TcpLen: 40
+```
+
+### 5.2 Key Indicators to Look For
+- **Sequential knocks**: Multiple alerts for your knock sequence ports
+- **Timing**: Knocks should occur within a short time window
+- **Source IP**: Same source IP for all knocks
+- **SSH connection**: SSH connection attempt after successful knocking
+
+## Part 6: Advanced Configuration (Optional)
+
+### 6.1 Using Snort Rules with Timing
+For more sophisticated detection, you can use flowbits:
+
+```bash
+# Advanced port knocking detection with state tracking
+alert tcp $EXTERNAL_NET any -> $SSH_SERVER 1234 (msg:"Port Knock 1/3"; flags:S; flowbits:set,knock1; flowbits:noalert; sid:1000014; rev:1;)
+
+alert tcp $EXTERNAL_NET any -> $SSH_SERVER 2345 (msg:"Port Knock 2/3"; flags:S; flowbits:isset,knock1; flowbits:set,knock2; flowbits:noalert; sid:1000015; rev:1;)
+
+alert tcp $EXTERNAL_NET any -> $SSH_SERVER 3456 (msg:"Port Knock 3/3 - Sequence Complete"; flags:S; flowbits:isset,knock2; sid:1000016; rev:1;)
+```
+
+## Troubleshooting
+
+### Common Issues
+1. **No alerts showing**: Check network interface and IP ranges
+2. **Too many false positives**: Adjust threshold values
+3. **Missing SSH alerts**: Verify SSH server IP and port configuration
+4. **Snort not starting**: Check configuration file syntax
+
+### Verification Commands
+```bash
+# Check Snort is running
+ps aux | grep snort
+
+# View recent alerts
+tail -f /var/log/snort/alert
+
+# Check interface traffic
+sudo tcpdump -i eth0 -c 10
+```
+
+## Lab Report Considerations
+
+Document the following for your lab report:
+1. Screenshots of Snort alerts during port knocking
+2. Evidence of SSH connection detection
+3. Analysis of alert timing and sequence
+4. Bonus: Port scanning detection results
+5. Discussion of detection effectiveness and potential bypasses
+
+## Security Implications
+
+Port knocking detection is important because:
+- It can reveal persistent access mechanisms
+- Indicates potential APT (Advanced Persistent Threat) activity
+- Shows attempts to bypass firewall restrictions
+- Helps identify reconnaissance activities
