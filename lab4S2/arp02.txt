@@ -1,42 +1,19 @@
-# ARP Attack Detection Rules for Educational Lab
-# Place these rules in your local.rules file or custom rules file
-
-# Rule 1: Detect ARP spoofing/poisoning attacks
-# Triggers on excessive ARP replies from a single source
 alert tcp any any -> any any (msg:"ARP Spoofing Attack Detected"; flow:established; threshold:type both, track by_src, count 10, seconds 60; sid:1000001; rev:1;)
 
-# Rule 2: Detect ARP flood attacks
-# Triggers when too many ARP requests are seen in a short time
 alert arp any any -> any any (msg:"ARP Flood Attack Detected"; threshold:type both, track by_src, count 50, seconds 30; sid:1000002; rev:1;)
 
-# Rule 3: Detect gratuitous ARP abuse
-# Gratuitous ARP packets where source and target IP are the same
 alert arp any any -> any any (msg:"Suspicious Gratuitous ARP Detected"; arp_opcode:reply; threshold:type both, track by_src, count 20, seconds 60; sid:1000003; rev:1;)
 
-# Rule 4: Detect ARP request storms
-# Large number of ARP requests from single source
 alert arp any any -> any any (msg:"ARP Request Storm Detected"; arp_opcode:request; threshold:type both, track by_src, count 100, seconds 60; sid:1000004; rev:1;)
 
-# Rule 5: Detect ARP replies without corresponding requests
-# This can indicate ARP poisoning attempts
 alert arp any any -> any any (msg:"Unsolicited ARP Reply Detected"; arp_opcode:reply; threshold:type both, track by_src, count 5, seconds 10; sid:1000005; rev:1;)
 
-# Rule 6: Detect duplicate IP announcements
-# Multiple MAC addresses claiming the same IP (ARP spoofing)
 alert arp any any -> any any (msg:"Duplicate IP Address Detected - Possible ARP Spoofing"; arp_opcode:reply; threshold:type both, track by_dst, count 3, seconds 30; sid:1000006; rev:1;)
 
-# Rule 7: Detect ARP packets with broadcast MAC in source
-# Malformed ARP packets often used in attacks
 alert arp any any -> any any (msg:"Malformed ARP Packet - Broadcast Source MAC"; content:"|ff ff ff ff ff ff|"; offset:6; depth:6; sid:1000007; rev:1;)
 
-# Rule 8: Detect ARP packets with null MAC addresses
-# Another form of malformed ARP often used in attacks
 alert arp any any -> any any (msg:"Malformed ARP Packet - Null MAC Address"; content:"|00 00 00 00 00 00|"; sid:1000008; rev:1;)
 
-# Rule 9: Monitor for ARP table poisoning patterns
-# Rapid ARP replies claiming multiple IP addresses
 alert arp any any -> any any (msg:"ARP Table Poisoning Pattern Detected"; arp_opcode:reply; threshold:type both, track by_src, count 15, seconds 20; sid:1000009; rev:1;)
 
-# Rule 10: Detect ARP reconnaissance scanning
-# Systematic ARP requests across IP range
 alert arp any any -> any any (msg:"ARP Reconnaissance Scan Detected"; arp_opcode:request; threshold:type both, track by_src, count 30, seconds 45; sid:1000010; rev:1;)
