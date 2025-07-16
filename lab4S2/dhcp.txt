@@ -1,0 +1,5 @@
+alert udp any 67 -> any 68 (msg:"DHCP OFFER detected"; content:"|35|"; offset:242; depth:1; content:"|02|"; distance:0; within:1; sid:1001; rev:1;)
+
+alert udp any 67 -> any 68 (msg:"Possible DHCP spoofing - Multiple DHCP servers"; threshold:type both, track by_src, count 2, seconds 30; sid:1002; rev:1;)
+
+alert udp any any -> any 67 (msg:"DHCP DISCOVER flood detected"; threshold:type both, track by_src, count 10, seconds 5; sid:1003; rev:1;)
